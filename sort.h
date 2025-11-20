@@ -1,169 +1,257 @@
-// sort.h - STL风格排序算法实现 for VC1.52C
+// sort.h - STL风格排序算法 for VC1.52C
 #ifndef SORT_H
 #define SORT_H
 
-#include <stdlib.h> // 用于 size_t
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
 
-// 定义比较函数类型
-typedef int (__cdecl *CompareFunc)(const void*, const void*);
+// 比较函数类型定义
+typedef int (*compare_func_t)(const void*, const void*);
 
-// 默认比较函数（从小到大）
-int __cdecl default_compare(const void* a, const void* b);
+// ==================== 比较函数对象（类似STL） ====================
 
-// 字节交换函数
-static void swap_bytes(void __near* a, void __near* b, size_t size) {
-    char __near* pa = (char __near*)a;
-    char __near* pb = (char __near*)b;
-    char temp;
+// 升序比较（类似std::less）
+int less(const void* a, const void* b) {
+    // 默认使用memcmp进行字节比较，适用于基本类型
+    return memcmp(a, b, sizeof(int));
+}
+
+// 降序比较（类似std::greater）  
+int greater(const void* a, const void* b) {
+    return -less(a, b);
+}
+
+// 整数升序
+int less_int(const void* a, const void* b) {
+    int ia = *(const int*)a;
+    int ib = *(const int*)b;
+    return (ia < ib) ? -1 : (ia > ib) ? 1 : 0;
+}
+
+// 整数降序
+int greater_int(const void* a, const void* b) {
+    return -less_int(a, b);
+}
+
+// 双精度升序
+int less_double(const void* a, const void* b) {
+    double da = *(const double*)a;
+    double db = *(const double*)b;
+    return (da < db) ? -1 : (da > db) ? 1 : 0;
+}
+
+// 双精度降序
+int greater_double(const void* a, const void* b) {
+    return -less_double(a, b);
+}
+
+// 字符串升序（字典序）
+int less_string(const void* a, const void* b) {
+    return strcmp(*(const char**)a, *(const char**)b);
+}
+
+// 字符串降序（逆字典序）
+int greater_string(const void* a, const void* b) {
+    return -less_string(a, b);
+}
+
+// ==================== 内部实现函数 ====================
+
+// 插入排序（用于小数组优化）
+static void insertion_sort(char* base, size_t num, size_t size, compare_func_t comp) {
+    char* end = base + num * size;
+    char* i, *j;
+    size_t k;
+    char key[64];
     
-    for (size_t i = 0; i < size; i++) {
-        temp = pa[i];
-        pa[i] = pb[i];
-        pb[i] = temp;
+    for (i = base + size; i < end; i += size) {
+        j = i - size;
+        
+        // 复制当前元素到key
+        for (k = 0; k < size; k++) {
+            key[k] = *((char*)i + k);
+        }
+        
+        // 移动比key大的元素
+        while (j >= base && comp(j, key) > 0) {
+            for (k = 0; k < size; k++) {
+                *((char*)j + size + k) = *((char*)j + k);
+            }
+            j -= size;
+        }
+        
+        // 插入key到正确位置
+        for (k = 0; k < size; k++) {
+            *((char*)j + size + k) = key[k];
+        }
+    }
+}
+
+// 三数取中法选择枢轴
+static char* median_of_three(char* a, char* b, char* c, compare_func_t comp) {
+    if (comp(a, b) < 0) {
+        if (comp(b, c) < 0) return b;
+        if (comp(a, c) < 0) return c;
+        return a;
+    } else {
+        if (comp(a, c) < 0) return a;
+        if (comp(b, c) < 0) return c;
+        return b;
     }
 }
 
 // 快速排序分区函数
-static size_t partition(void __near* base, size_t num, size_t size, CompareFunc compare) {
-    char __near* array = (char __near*)base;
-    size_t pivot_index = num / 2; // 选择中间元素作为枢轴
-    size_t i = 0;
-    size_t j = num - 1;
+static char* partition(char* low, char* high, size_t size, compare_func_t comp) {
+    // 选择枢轴（三数取中）
+    char* mid = low + ((high - low) / size / 2) * size;
+    char* pivot_ptr = median_of_three(low, mid, high - size, comp);
     
     // 将枢轴移动到末尾
-    swap_bytes(array + pivot_index * size, array + (num - 1) * size, size);
+    char pivot[64];
+    size_t i;
+    char* j;
     
-    while (1) {
-        // 从左向右找到第一个大于等于枢轴的元素
-        while (i < j && compare(array + i * size, array + (num - 1) * size) < 0) {
-            i++;
+    for (i = 0; i < size; i++) {
+        pivot[i] = *((char*)pivot_ptr + i);
+        *((char*)pivot_ptr + i) = *((char*)(high - size) + i);
+        *((char*)(high - size) + i) = pivot[i];
+    }
+    
+    char* current = low;
+    for (j = low; j < high - size; j += size) {
+        if (comp(j, pivot) <= 0) {
+            // 交换元素
+            for (i = 0; i < size; i++) {
+                char temp = *((char*)current + i);
+                *((char*)current + i) = *((char*)j + i);
+                *((char*)j + i) = temp;
+            }
+            current += size;
         }
-        
-        // 从右向左找到第一个小于等于枢轴的元素
-        while (i < j && compare(array + j * size, array + (num - 1) * size) >= 0) {
-            j--;
-        }
-        
-        // 如果指针相遇，退出循环
-        if (i >= j) {
-            break;
-        }
-        
-        // 交换元素
-        swap_bytes(array + i * size, array + j * size, size);
     }
     
     // 将枢轴放回正确位置
-    swap_bytes(array + i * size, array + (num - 1) * size, size);
+    for (i = 0; i < size; i++) {
+        char temp = *((char*)current + i);
+        *((char*)current + i) = *((char*)(high - size) + i);
+        *((char*)(high - size) + i) = temp;
+    }
     
-    return i;
+    return current;
 }
 
-// 快速排序主函数
-static void quick_sort_impl(void __near* base, size_t num, size_t size, CompareFunc compare) {
-    if (num <= 1) {
+// 优化的快速排序主函数
+static void quick_sort(char* base, size_t num, size_t size, compare_func_t comp) {
+    // 小数组使用插入排序
+    if (num < 16) {
+        insertion_sort(base, num, size, comp);
         return;
     }
     
-    size_t pivot_index = partition(base, num, size, compare);
+    char* low = base;
+    char* high = base + num * size;
     
-    // 递归排序左半部分
-    if (pivot_index > 0) {
-        quick_sort_impl(base, pivot_index, size, compare);
-    }
+    // 使用栈模拟递归
+    struct Stack {
+        char* low;
+        char* high;
+    };
     
-    // 递归排序右半部分
-    if (pivot_index + 1 < num) {
-        quick_sort_impl((char __near*)base + (pivot_index + 1) * size, 
-                       num - pivot_index - 1, size, compare);
+    static Stack stack[64];
+    int top = -1;
+    
+    stack[++top].low = low;
+    stack[top].high = high;
+    
+    while (top >= 0) {
+        low = stack[top].low;
+        high = stack[top].high;
+        top--;
+        
+        if (high - low <= 16 * (ptrdiff_t)size) {
+            insertion_sort(low, (high - low) / size, size, comp);
+            continue;
+        }
+        
+        char* pivot = partition(low, high, size, comp);
+        size_t left_size = (pivot - low) / size;
+        size_t right_size = (high - pivot - size) / size;
+        
+        if (left_size < right_size) {
+            if (left_size > 1) {
+                top++;
+                stack[top].low = low;
+                stack[top].high = pivot;
+            }
+            if (right_size > 1) {
+                top++;
+                stack[top].low = pivot + size;
+                stack[top].high = high;
+            }
+        } else {
+            if (right_size > 1) {
+                top++;
+                stack[top].low = pivot + size;
+                stack[top].high = high;
+            }
+            if (left_size > 1) {
+                top++;
+                stack[top].low = low;
+                stack[top].high = pivot;
+            }
+        }
     }
 }
 
-// STL风格排序函数 - 带比较函数
-void __cdecl sort(void __near* begin, void __near* end, size_t size, CompareFunc compare) {
-    char __near* begin_ptr = (char __near*)begin;
-    char __near* end_ptr = (char __near*)end;
+// ==================== 主排序函数 ====================
+
+// STL风格排序函数 - 主要接口
+void sort(void* begin, void* end, size_t size, compare_func_t comp) {
+    if (begin == end || size == 0) return;
     
+    char* begin_ptr = (char*)begin;
+    char* end_ptr = (char*)end;
     size_t num = (end_ptr - begin_ptr) / size;
-    if (num <= 1) return;
     
-    quick_sort_impl(begin, num, size, compare);
+    quick_sort(begin_ptr, num, size, comp);
 }
 
-// STL风格排序函数 - 不带比较函数（使用默认比较）
-void __cdecl sort_default(void __near* begin, void __near* end, size_t size) {
-    sort(begin, end, size, default_compare);
+// 默认排序函数 - 使用less作为默认比较函数
+void sort(void* begin, void* end, size_t size) {
+    sort(begin, end, size, less);
 }
 
-// 默认比较函数（从小到大）
-int __cdecl default_compare(const void* a, const void* b) {
-    // 由于不知道具体类型，这里假设是整数比较
-    int int_a = *(const int*)a;
-    int int_b = *(const int*)b;
-    
-    if (int_a < int_b) return -1;
-    if (int_a > int_b) return 1;
-    return 0;
+// ==================== 类型特定的便捷函数（可选） ====================
+
+// 整数数组排序
+void sort(int* begin, int* end, compare_func_t comp) {
+    if (comp == NULL) comp = less_int;
+    sort(begin, end, sizeof(int), comp);
 }
 
-// 类型特定的比较函数和排序函数
-
-// 整数比较函数
-int __cdecl compare_int(const void* a, const void* b) {
-    int int_a = *(const int*)a;
-    int int_b = *(const int*)b;
-    
-    if (int_a < int_b) return -1;
-    if (int_a > int_b) return 1;
-    return 0;
+void sort(int* begin, int* end) {
+    sort(begin, end, less_int);
 }
 
-// 整数排序函数
-void __cdecl sort_int(int __near* begin, int __near* end, CompareFunc compare) {
-    if (compare == NULL) {
-        compare = compare_int;
-    }
-    sort(begin, end, sizeof(int), compare);
+// 双精度数组排序
+void sort(double* begin, double* end, compare_func_t comp) {
+    if (comp == NULL) comp = less_double;
+    sort(begin, end, sizeof(double), comp);
 }
 
-// 浮点数比较函数
-int __cdecl compare_double(const void* a, const void* b) {
-    double double_a = *(const double*)a;
-    double double_b = *(const double*)b;
-    
-    if (double_a < double_b) return -1;
-    if (double_a > double_b) return 1;
-    return 0;
+void sort(double* begin, double* end) {
+    sort(begin, end, less_double);
 }
 
-// 浮点数排序函数
-void __cdecl sort_double(double __near* begin, double __near* end, CompareFunc compare) {
-    if (compare == NULL) {
-        compare = compare_double;
-    }
-    sort(begin, end, sizeof(double), compare);
+// 字符串数组排序
+void sort(const char** begin, const char** end, compare_func_t comp) {
+    if (comp == NULL) comp = less_string;
+    sort((void*)begin, (void*)end, sizeof(const char*), comp);
 }
 
-// 字符串比较函数
-int __cdecl compare_string(const void* a, const void* b) {
-    const char __near* str_a = *(const char __near* __near*)a;
-    const char __near* str_b = *(const char __near* __near*)b;
-    
-    // 简单的字符串比较实现
-    while (*str_a && *str_b && *str_a == *str_b) {
-        str_a++;
-        str_b++;
-    }
-    
-    return (*str_a > *str_b) - (*str_a < *str_b);
-}
-
-// 字符串排序函数
-void __cdecl sort_string(const char __near* __near* begin, const char __near* __near* end, CompareFunc compare) {
-    if (compare == NULL) {
-        compare = compare_string;
-    }
-    sort((void __near*)begin, (void __near*)end, sizeof(const char __near*), compare);
+void sort(const char** begin, const char** end) {
+    sort(begin, end, less_string);
 }
 
 #endif // SORT_H
