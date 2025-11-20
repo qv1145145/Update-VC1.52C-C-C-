@@ -32,11 +32,11 @@ sort(arr, arr + n, greater_int);
 ```
 
 ### 浮点数数组排序
-` ` `cpp
+```cpp
 double values[] = {3.14, 2.71, 1.41};
 sort(values, values + 3);                    // 升序
 sort(values, values + 3, greater_double);    // 降序
-` ` `
+```
 
 ### 字符串数组排序
 ```cpp
