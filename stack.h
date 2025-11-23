@@ -1,4 +1,4 @@
-// stack.h - 完整内联实现
+// stack.h - 瀹屾暣鍐呰仈瀹炵幇
 #ifndef STACK_H
 #define STACK_H
 
