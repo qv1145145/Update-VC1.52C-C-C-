@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <malloc.h>
+#include "stdbool.h"
 
 class stack {
 private:
@@ -150,3 +151,4 @@ private:
 };
 
 #endif /* STACK_H */
+
